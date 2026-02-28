@@ -1,0 +1,47 @@
+-- Task: Implement Audit Logging for Bronze → Silver → Gold pipeline
+
+--Below is a clear, production-style outline to implement Audit Logging for your
+--Bronze → Silver → Gold pipeline.
+
+-- Step 1: Create an Audit Log Table
+CREATE TABLE dbo.etl_audit_log (
+    audit_id INT IDENTITY(1,1) PRIMARY KEY,
+    pipeline_name NVARCHAR(100),
+    layer_name NVARCHAR(50),
+    start_time DATETIME,
+    end_time DATETIME,
+    duration_seconds INT,
+    status NVARCHAR(20),
+    row_count INT NULL,
+    error_message NVARCHAR(MAX) NULL
+);
+
+-- Step 2: Modify the run_full_dwh_pipeline Stored Procedure to Include Audit Logging
+CREATE OR ALTER PROCEDURE dbo.run_full_pipeline
+AS
+BEGIN
+    DECLARE @start DATETIME = GETDATE();
+
+    BEGIN TRY
+        EXEC bronze.load_bronze;
+        EXEC silver.load_silver;
+
+        INSERT INTO dbo.etl_audit_log
+        VALUES ('DWH_PIPELINE','FULL',
+                @start,GETDATE(),
+                DATEDIFF(SECOND,@start,GETDATE()),
+                'SUCCESS',
+                (SELECT COUNT(*) FROM silver.crm_sales_details),
+                NULL);
+    END TRY
+    BEGIN CATCH
+        INSERT INTO dbo.etl_audit_log
+        VALUES ('DWH_PIPELINE','FULL',
+                @start,GETDATE(),
+                DATEDIFF(SECOND,@start,GETDATE()),
+                'FAILED',
+                NULL,
+                ERROR_MESSAGE());
+        THROW;
+    END CATCH
+END;
